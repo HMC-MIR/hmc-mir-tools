@@ -1,8 +1,4 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-"""Extracting Bootleg Score Features.
-This notebook extracts bootleg score features from all the sheet music images."""
+"""Extracting bootleg scores from sheet music images."""
 
 def removeBkgdLighting(pimg, filtsz=5, thumbnailW = 100, thumbnailH = 100):
     tinyimg = pimg.copy()
