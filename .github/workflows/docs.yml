@@ -30,11 +30,13 @@ jobs:
         with:
           pre-build-command: "pip install -r requirements.txt"
           docs-folder: "docs/"
+      - name: Generate artifact
+        run: |
+          tar -cvzf github-pages.tar docs/build/html
       - name: Upload artifact
         # Automatically uploads an artifact from the './_site' directory by default
         uses: actions/upload-pages-artifact@v1
         with:
-          name: sphinx-site
           path: docs/build/html
 
   # Deployment job
