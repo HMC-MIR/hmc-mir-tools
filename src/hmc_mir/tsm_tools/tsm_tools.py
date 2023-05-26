@@ -1,20 +1,26 @@
+"""Time Series Modulation
+"""
+
+# import numpy as np
+# import librosa as lb
+# from scipy.signal import medfilt
+
 def harmonic_percussive_separation(x, sr=22050, fft_size = 2048, hop_length=512, lh=6, lp=6):
-    '''
-    Performs harmonic-percussive separation on a given audio sample.
+    '''Performs harmonic-percussive separation on a given audio sample.
     
-    Inputs
-    x: the input audio waveform
-    sr: sample rate of the audio data
-    fft_size: specifies the FFT size to use in computing an STFT
-    hop_length: specifies the hop length in samples to use in computing an STFT
-    lh: the harmonic spectrotemporal median filter will be of size (1, 2*lh+1)
-    lp: the percussive spectrotemporal median filter will be of size (2*lp+1, 1)
+    Args
+        x: the input audio waveform
+        sr: sample rate of the audio data
+        fft_size: specifies the FFT size to use in computing an STFT
+        hop_length: specifies the hop length in samples to use in computing an STFT
+        lh: the harmonic spectrotemporal median filter will be of size (1, 2*lh+1)
+        lp: the percussive spectrotemporal median filter will be of size (2*lp+1, 1)
     
-    Outputs
-    xh: audio waveform of the estimated harmonic component
-    xp: audio waveform of the estimated percussive component
-    Xh: an STFT of the input signal with percussive components masked out
-    Xp: an STFT of the input signal with harmonic components masked out
+    Returns:
+        xh: audio waveform of the estimated harmonic component
+        xp: audio waveform of the estimated percussive component
+        Xh: an STFT of the input signal with percussive components masked out
+        Xp: an STFT of the input signal with harmonic components masked out
     '''
     
     window = hann_window(fft_size)
@@ -32,25 +38,24 @@ def harmonic_percussive_separation(x, sr=22050, fft_size = 2048, hop_length=512,
     return xh, xp, Xh, Xp
 
 def hann_window(L):
-    '''
-    Returns a Hann window of a specified length.
+    '''Returns a Hann window of a specified length.
     
-    Inputs
-    L: length of window to return
+    Args:
+        L: length of window to return
     '''
     w = .5 * (1 - np.cos(2*np.pi * np.arange(L)/ L))
     return w
 
 def invert_stft(S, hop_length, window):
-    '''
-    Reconstruct a signal from a modified STFT matrix.
+    '''Reconstruct a signal from a modified STFT matrix.
     
-    Inputs
-    S: modified STFT matrix
-    hop_length: the synthesis hop size in samples
-    window: an array specifying the window used for FFT analysis
+    Args:
+        S: modified STFT matrix
+        hop_length: the synthesis hop size in samples
+        window: an array specifying the window used for FFT analysis
     
-    Returns a time-domain signal y whose STFT is closest to S in squared error distance.
+    Returns:
+        A time-domain signal y whose STFT is closest to S in squared error distance.
     '''
     
     L = len(window)
@@ -83,14 +88,14 @@ def invert_stft(S, hop_length, window):
     return y
 
 def calc_sum_squared_window(window, hop_length):
-    '''
-    Calculates the denominator term for computing synthesis frames.
+    '''Calculates the denominator term for computing synthesis frames.
     
-    Inputs
-    window: array specifying the window used in FFT analysis
-    hop_length: the synthesis hop size in samples
+    Inputs:
+        window: array specifying the window used in FFT analysis
+        hop_length: the synthesis hop size in samples
     
-    Returns an array specifying the normalization factor.
+    Returns:
+        An array specifying the normalization factor.
     '''
     assert (len(window) % hop_length == 0), "Hop length does not divide the window evenly."
     
@@ -102,18 +107,19 @@ def calc_sum_squared_window(window, hop_length):
     return den
 
 def tsm_phase_vocoder(x, alpha = 1.0, L = 2048, sr = 22050):
-    '''
-    Time stretches the input signal using the phase vocoder method.  Uses a synthesis hop size that is 
-    one-fourth the value of L.  Note that this implementation allows for a non-integer analysis hop size
+    '''Time stretches the input signal using the phase vocoder method.
+    
+    Uses a synthesis hop size that is one-fourth the value of L.  Note that this implementation allows for a non-integer analysis hop size
     (in samples), which ensures that the time-scale modification factor is exactly as specified.
     
-    Inputs
-    x: the input signal
-    alpha: the time stretch factor, which is defined as the ratio of the synthesis hop size to the analysis hop size
-    L: the length of each analysis frame in samples
-    sr: sampling rate
+    Args:
+        x: the input signal
+        alpha: the time stretch factor, which is defined as the ratio of the synthesis hop size to the analysis hop size
+        L: the length of each analysis frame in samples
+        sr: sampling rate
     
-    Returns the time-stretched signal y.
+    Returns:
+        the time-stretched signal y.
     '''
     assert(L % 4 == 0), "Frame length must be divisible by four."
     Hs = L // 4
@@ -138,18 +144,17 @@ def tsm_phase_vocoder(x, alpha = 1.0, L = 2048, sr = 22050):
     return y
 
 def my_stft(x, N, hop_length, window):
-    '''
-    A custom implementation of the STFT that allows for non-integer hop lengths (in samples).
+    '''A custom implementation of the STFT that allows for non-integer hop lengths (in samples).
     
-    Inputs
-    x: the input audio waveform
-    N: the FFT size
-    hop_length: the hop size specified in samples, can be a non-integer
-    window: the window to apply to the analysis frames
+    Args:
+        x: the input audio waveform
+        N: the FFT size
+        hop_length: the hop size specified in samples, can be a non-integer
+        window: the window to apply to the analysis frames
     
-    Outputs
-    X: the computed STFT matrix
-    frame_offsets: a list specifying the offsets (in samples) of each analysis frame
+    Returns:
+        X: the computed STFT matrix
+        frame_offsets: a list specifying the offsets (in samples) of each analysis frame
     '''
     
     assert len(window) == N
@@ -170,19 +175,18 @@ def my_stft(x, N, hop_length, window):
     return X, frame_offsets
 
 def estimateIF(S, sr, hop_samples):
-    '''
-    Estimates the instantaneous frequencies in a STFT matrix.
+    '''Estimates the instantaneous frequencies in a STFT matrix.
     
-    Note: This function is not actually used in our custom implementation of the phase vocoder -- 
+    This function is not actually used in our custom implementation of the phase vocoder -- 
     it is included here as a contrast to estimateIF_var() below.
     
-    Inputs
-    S: the STFT matrix, should only contain the lower half of the frequency bins
-    sr: sampling rate
-    hop_samples: the hop size of the STFT analysis in samples
+    Args:
+        S: the STFT matrix, should only contain the lower half of the frequency bins
+        sr: sampling rate
+        hop_samples: the hop size of the STFT analysis in samples
     
-    Returns a matrix containing the estimated instantaneous frequency at each time-frequency bin.
-    This matrix should contain one less column than S.
+    Returns:
+      A matrix containing the estimated instantaneous frequency at each time-frequency bin. This matrix should contain one less column than S.
     '''
     hop_sec = hop_samples / sr
     fft_size = (S.shape[0] - 1) * 2
@@ -194,17 +198,19 @@ def estimateIF(S, sr, hop_samples):
     return w_if
 
 def tsm_overlap_add(x, alpha = 1.0, L = 220):
-    '''
-    Time stretches the input signal using the overlap-add method.  Uses a synthesis hop size that is half the
-    value of L.  Note that this implementation allows for a non-integer analysis hop size (in samples), which
+    '''Time stretches the input signal using the overlap-add method.
+    
+    Uses a synthesis hop size that is half the value of L. 
+    Note that this implementation allows for a non-integer analysis hop size (in samples), which
     ensures that the time-scale modification factor is exactly as specified.
     
-    Inputs
-    x: the input signal
-    alpha: the time stretch factor, which is defined as the ratio of the synthesis hop size to the analysis hop size
-    L: the length of each analysis frame in samples
+    Args:
+        x: the input signal
+        alpha: the time stretch factor, which is defined as the ratio of the synthesis hop size to the analysis hop size
+        L: the length of each analysis frame in samples
     
-    Returns the time-stretched signal y.
+    Returns:
+        the time-stretched signal y
     '''
     assert(L % 2 == 0), "Frame length must be even."
     Hs = L // 2
@@ -227,30 +233,29 @@ def tsm_overlap_add(x, alpha = 1.0, L = 220):
     return y
 
 def mix_recordings(x1, x2):
-    '''
-    Mixes two audio waveforms together.
+    '''Mixes two audio waveforms together.
     
-    Inputs
-    x1: first audio waveform
-    x2: second audio waveform
+    Args:
+        x1: first audio waveform
+        x2: second audio waveform
     
-    Returns an audio waveform that is an average of the two waveforms.  
-    The length of the returned waveform is the minimum of the two lengths.
+    Returns:
+        An audio waveform that is an average of the two waveforms. The length of the returned waveform is the minimum of the two lengths.
     '''
     min_length = min(len(x1), len(x2))
     y = .5 * (x1[0:min_length] + x2[0:min_length])
     return y
 
 def tsm_hybrid(x, alpha=1.0, sr=22050):
-    '''
-    Time stretches the input signal using a hybrid method that combines overlap-add and phase vocoding.
+    '''Time stretches the input signal using a hybrid method that combines overlap-add and phase vocoding.
     
-    Inputs
-    x: the input signal
-    alpha: the time stretch factor, which is defined as the ratio of the synthesis hop size to the analysis hop size
-    sr: sampling rate
+    Args:
+        x: the input signal
+        alpha: the time stretch factor, which is defined as the ratio of the synthesis hop size to the analysis hop size
+        sr: sampling rate
     
-    Returns the time-stretched signal y.
+    Returns:
+        the time-stretched signal y.
     '''
     
     xh, xp, _, _ = harmonic_percussive_separation(x)

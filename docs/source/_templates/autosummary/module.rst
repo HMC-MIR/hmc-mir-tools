@@ -23,7 +23,6 @@
 
             .. autosummary::
                 :toctree:
-                :nosignatures:
                 :template: autosummary/base.rst
                 {% for item in functions %}
                     {{ item }}
@@ -72,3 +71,4 @@
             {%- endfor %}
     {% endif %}
 {% endblock %}
+

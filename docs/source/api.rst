@@ -6,4 +6,4 @@ API Reference
     :toctree: _autosummary
     :recursive:
 
-    hmc_mir.tsm_tools
+    hmc_mir

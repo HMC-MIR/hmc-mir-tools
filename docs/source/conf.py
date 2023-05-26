@@ -28,9 +28,11 @@ extensions = [
     "sphinx.ext.autosummary",
     'recommonmark',
     'sphinx.ext.githubpages',
+    'sphinx.ext.todo'
 ]
 
-autosummary_generate = True
+# autosummary_generate = True
+autodoc_typehints = "description"
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
