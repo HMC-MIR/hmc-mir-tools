@@ -1,9 +1,9 @@
 """Time Series Modulation
 """
 
-# import numpy as np
-# import librosa as lb
-# from scipy.signal import medfilt
+import numpy as np
+import librosa as lb
+from scipy.signal import medfilt
 
 def harmonic_percussive_separation(x, sr=22050, fft_size = 2048, hop_length=512, lh=6, lp=6):
     '''Performs harmonic-percussive separation on a given audio sample.
@@ -132,7 +132,7 @@ def tsm_phase_vocoder(x, alpha = 1.0, L = 2048, sr = 22050):
     # compute modified STFT
     w_if = estimateIF_var(X, sr, analysis_frame_offsets/sr) # custom implementation to handle non-constant frame locations
     phase_mod = np.zeros(X.shape)
-    phase_mod[:,0] = np.angle(X[:,0])
+    phase_mod[:,0] = np.angle(X[:,0]) 
     for i in range(1, phase_mod.shape[1]):
         phase_mod[:,i] = phase_mod[:,i-1] + w_if[:,i-1] * Hs / sr
     Xmod = np.abs(X) * np.exp(1j * phase_mod)
