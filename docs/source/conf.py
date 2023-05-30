@@ -31,7 +31,7 @@ extensions = [
     'sphinx.ext.todo'
 ]
 
-# autosummary_generate = True
+autosummary_generate = True
 autodoc_typehints = "description"
 
 napoleon_custom_sections = [('Returns', 'params_style')]

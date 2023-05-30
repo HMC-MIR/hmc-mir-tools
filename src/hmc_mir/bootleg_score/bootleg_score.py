@@ -1,21 +1,19 @@
-"""Extracting bootleg scores from sheet music images."""
+"""Extracting bootleg scores from sheet music images.
+"""
 
 import numpy as np
-from numpy.matlib import repmat
 import matplotlib.pyplot as plt
 from PIL import Image, ImageFilter, ImageChops
 import cv2
 from skimage import filters, measure
-from skimage.measure import label, regionprops
+from skimage.measure import regionprops
 from sklearn.cluster import KMeans
 import matplotlib.patches as mpatches
 from scipy.signal import convolve2d
 import pickle
-import librosa as lb
 import time
 import os
 import os.path
-import glob
 
 def removeBkgdLighting(pimg, filtsz=5, thumbnailW = 100, thumbnailH = 100):
     tinyimg = pimg.copy()
