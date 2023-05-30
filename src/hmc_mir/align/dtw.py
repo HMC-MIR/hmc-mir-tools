@@ -17,7 +17,7 @@ def dtw_backtrace(D, B, steps, subseq=False):
         cstart: the column index to start backtracking from
     
     Returns:
-        path: a python list of (row, col) coordinates for the optimal path.
+        A numpy array of (row, col) coordinates for the optimal path.
     '''
 
     rstart = B.shape[0] - 1
@@ -50,7 +50,7 @@ def dtw(C, steps, weights, subseq=False):
     Returns:
         D: cumulative cost matrix
         B: backtrace matrix
-        path: a python list of (row, col) coordinates for the optimal path.
+        path: a numpy array of (row, col) coordinates for the optimal path.
     '''
     D = np.ones(C.shape) * np.inf
     B = np.zeros(C.shape, dtype=np.int8)

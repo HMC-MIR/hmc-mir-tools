@@ -1,6 +1,6 @@
 '''FlexDTW: Dynamic Time Warping with Boundaries Constraint Relaxation
 
-Code is from: https://github.com/HMC-MIR/FlexDTW/blob/main/FlexDTW.ipynb
+Code is from: https://github.com/HMC-MIR/FlexDTW/blob/main/FlexDTW.ipynb and
 '''
 
 import numpy as np
@@ -69,7 +69,7 @@ def flex_dtw_backtrace(D, B, steps, rstart, cstart):
         cstart: the column index to start backtracking from
     
     Returns:
-        path: a python list of (row, col) coordinates for the optimal path.
+        A numpy array of (row, col) coordinates for the optimal path.
     '''
     pos = (rstart, cstart)
     path = []
@@ -96,7 +96,7 @@ def flex_dtw(C, steps, weights, buffer = 1):
     Returns:
         D: cumulative cost matrix
         B: backtrace matrix
-        path: a python list of (row, col) coordinates for the optimal path.
+        path: numpy array of (row, col) coordinates for the optimal path.
         optimal_cost: the optimal cost
         debug: debugging information for examining the average cost per manhattan block for each of the candidate ending positions (see find_best_endpoint)
     '''

@@ -17,7 +17,7 @@ def nwtw_backtrace(D, B, steps):
         cstart: the column index to start backtracking from
     
     Returns:
-        path: a python list of (row, col) coordinates for the optimal path.
+        A numpy array of (row, col) coordinates for the optimal path.
     '''
 
     path = []
@@ -44,7 +44,7 @@ def nwtw(C, gamma=0.346):
     Returns:
         D: cumulative cost matrix
         B: backtrace matrix
-        path: a python list of (row, col) coordinates for the optimal path.
+        path: a numpy array of (row, col) coordinates for the optimal path.
         optimal_cost: the optimal cost
 
     '''
