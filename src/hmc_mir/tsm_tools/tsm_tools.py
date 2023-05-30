@@ -1,4 +1,7 @@
 """Time Series Modulation
+
+Code is from https://github.com/HMC-MIR/PianoConcertoAccompaniment/blob/main/tsm_tools.ipynb and https://www.mdpi.com/128016
+
 """
 
 import numpy as np

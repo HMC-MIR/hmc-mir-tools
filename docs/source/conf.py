@@ -34,6 +34,8 @@ extensions = [
 # autosummary_generate = True
 autodoc_typehints = "description"
 
+napoleon_custom_sections = [('Returns', 'params_style')]
+
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
