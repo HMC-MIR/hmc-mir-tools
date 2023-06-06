@@ -267,3 +267,141 @@ def tsm_hybrid(x, alpha=1.0, sr=22050):
     y = mix_recordings(xh_stretched, xp_stretched)
     
     return y
+
+def estimateIF_var(S, sr, timestamps):
+    '''
+    Estimates the instantaneous frequencies in an STFT-like matrix when the analysis frames
+    are not evenly spaced.
+    
+    Args:
+        S: the STFT-like matrix, should only contain the lower half of the frequency bins
+        sr: sampling rate
+        timestamps: timestamps corresponding to each STFT column (in sec)
+    
+    Returns:
+        A matrix containing the estimated instantaneous frequency at each time-frequency bin. This matrix should contain one less column than S.
+    '''
+    assert S.shape[1] == len(timestamps)
+#    hop_sec = hop_samples / sr
+    fft_size = (S.shape[0] - 1) * 2
+    w_nom = np.arange(S.shape[0]) * sr / fft_size * 2 * np.pi
+    w_nom = w_nom.reshape((-1,1))    
+    unwrapped = np.angle(S[:,1:]) - np.angle(S[:,0:-1]) - w_nom * (timestamps[1:] - timestamps[0:-1]).reshape((1,-1))
+    wrapped = (unwrapped + np.pi) % (2 * np.pi) - np.pi
+    w_if = w_nom + wrapped / (timestamps[1:] - timestamps[0:-1]).reshape((1,-1))
+    return w_if
+
+def tsmvar_overlap_add(x, alignment, L = 220, fs = 22050):
+    '''
+    Time stretches the input signal using the overlap-add method according to a given alignment.
+    Uses a synthesis hop size that is half the value of L.
+    
+    Args:
+        x: the input signal (orchestra only)
+        alignment: a 2xN matrix specifying the desired alignment in seconds.  The first row indicates the timestamp
+            in the input signal, and the last row indicates where in the output signal the instant should occur.
+        L: the length of each analysis frame in samples
+        fs: sample rate of input signal
+    
+    Returns: 
+        The variable time-stretched signal y
+    '''
+    assert(L % 2 == 0), "Frame length must be even."
+    Hs = L // 2
+
+    # determine interpolation points
+    target_dur = alignment[1,-1] # in sec
+    target_start = alignment[1,0] # if a subsequence alignment, output will be zero until target_start (in sec)
+    numFrames = int((target_dur * fs - L) // Hs) + 1
+    analysisFrames = np.zeros((L, numFrames))
+    interp_pts = np.interp(np.arange(numFrames)*Hs/fs, alignment[1,:], alignment[0,:]) # left edge of analysis windows
+    
+    # compute analysis frames    
+    for i in range(numFrames):
+        if i*Hs/fs >= target_start:
+            offset = int(np.round(interp_pts[i] * fs))
+            offset = min(offset, len(x) - L)
+            analysisFrames[:, i] = x[offset: offset + L]
+
+    # reconstruction
+    synthesisFrames = analysisFrames * hann_window(L).reshape((-1,1)) # use broadcasting
+    y = np.zeros(Hs * (numFrames-1) + L)
+    for i in range(numFrames):
+        offset = i * Hs
+        y[offset:offset+L] += synthesisFrames[:,i]
+            
+    return y
+
+def tsmvar_phase_vocoder(x, alignment, L = 2048, fs = 22050):
+    '''
+    Time stretches the input signal using a phase vocoder according to a given alignment.  
+    Uses a synthesis hop size that is one-fourth the value of L.
+    
+    Args:
+        x: the input signal
+        alignment: a 2xN matrix specifying the desired alignment in seconds.  The first row indicates the timestamp
+            in the input signal, and the last row indicates where in the output signal the instant should occur.
+        L: the length of each analysis frame in samples
+        fs: sampling rate
+    
+    Return:
+        The variable time-stretched signal y
+    '''
+    assert(L % 4 == 0), "Frame length must be divisible by four."
+    Hs = L // 4
+
+    # determine interpolation points
+    target_dur = alignment[1,-1] # in sec
+    target_start_frm = int(np.ceil(alignment[1,0] * fs / Hs)) # if a subsequence alignment, output will be zero until target_start_frm
+    numFrames = int((target_dur * fs - L) // Hs) + 1
+    analysisFrames = np.zeros((numFrames, L))
+    interp_pts = np.interp(np.arange(numFrames)*Hs/fs, alignment[1,:], alignment[0,:]) # left edge of analysis windows
+
+    # compute analysis frames
+    for i in range(numFrames):
+        if i >= target_start_frm:
+            offset = int(np.round(interp_pts[i] * fs))
+            offset = min(offset, len(x) - L)
+            analysisFrames[i,:] = x[offset: offset + L]
+
+    # compute STFT
+    window = hann_window(L)
+    analysisFrames = analysisFrames * window.reshape((1,-1))
+    Xfull = np.fft.fft(analysisFrames, axis=1)
+    halfLen = L//2 + 1
+    X = Xfull[:,0:halfLen].T
+   
+    # compute modified STFT
+    w_if = estimateIF_var(X[:,target_start_frm:], fs, interp_pts[target_start_frm:]) # only for active frames
+    phase_mod = np.zeros(X.shape)
+    phase_mod[:,target_start_frm] = np.angle(X[:,target_start_frm])
+    for i in range(target_start_frm + 1, phase_mod.shape[1]):
+        phase_mod[:,i] = phase_mod[:,i-1] + w_if[:,i-target_start_frm-1] * Hs / fs
+    Xmod = np.abs(X) * np.exp(1j * phase_mod)
+    
+    # signal reconstruction
+    y = invert_stft(Xmod, Hs, window)
+    #y = lb.core.istft(Xmod, hop_length=Hs, center=False)
+    
+    return y
+
+def tsmvar_hybrid(x, alignment, sr=22050):
+    '''
+    Time stretches the input signal using a hybrid method that combines overlap-add and phase vocoding.
+    The time stretch factor is specified at each time instant by the provided alignment.
+    
+    Args:
+        x: the input signal
+        alignment: a 2xN matrix specifying the desired alignment in seconds.  The first row indicates the timestamp
+            in the input signal, and the last row indicates where in the output signal the instant should occur.
+        sr: sampling rate
+    
+    Returns:
+        The variable time-stretched signal y
+    '''
+    xh, xp, _, _ = harmonic_percussive_separation(x)
+    xh_stretched = tsmvar_phase_vocoder(xh, alignment)
+    xp_stretched = tsmvar_overlap_add(xp, alignment)
+    y = mix_recordings(xh_stretched, xp_stretched)
+    
+    return y
