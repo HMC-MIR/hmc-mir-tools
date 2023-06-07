@@ -6,7 +6,7 @@ from numba import njit, prange
 import numpy as np
 from skimage.filters import threshold_li, threshold_niblack, threshold_triangle, threshold_isodata, threshold_mean, threshold_local
 
-from hmc_mir.align.isa_dtw import DTW_Cost_To_AccumCostAndSteps
+from hmc_mir.align.isa_dtw import DTW_Cost_To_AccumCostAndSteps, DTW_GetPath
 
 ### SA_BCQT ###
 
@@ -91,6 +91,71 @@ def align_binarized_cqts(query, ref, steps = [1,1,1,2,2,1], weights = [1,1,2]):
     # Reformat the output
     wp = wp.T[::-1]
     return wp
+
+def time_stretch_part(query, ref, alignment):
+    """Uses the alignment computed from DTW to time stretch the query to have the same dimensions as the reference.
+    
+    Args:
+        query (np.ndarray): The CQT of the part
+        ref (np.ndarray): The CQT of the full mix
+        alignment (np.ndarray): The alignment between the part and full mix
+    
+    Returns:
+        feature_stretch (np.ndarray): The time stretched part
+    """
+    m, n = ref.shape
+    feature_stretch = np.zeros((m, n))
+    used = set(alignment[:, 1])
+    for query_idx, ref_idx in alignment:
+        feature_stretch[:, ref_idx] = query[:, query_idx]
+    for j in range(n):
+        if j not in used:
+            feature_stretch[:, j] = feature_stretch[:, j-1]
+    return feature_stretch
+
+def stretch_segments(segments, wp):
+    """Uses the alignment created from DTW to also time stretch the nonsilence segments accordingly.
+    
+    Args:
+        segments (list): The nonsilence segments
+        wp (np.ndarray): The alignment between the part and full mix
+    
+    Returns:
+        segments (list): The time stretched nonsilence segments
+    """
+    wp = np.array(sorted(wp, key = lambda x: x[0]))
+    query_preds = wp[:, 0]
+    ref_preds = wp[:, 1]
+    query_to_ref = np.interp(list(range(max(query_preds[-1], ref_preds[-1]) + 1)), query_preds, ref_preds)
+    n = len(query_to_ref) - 1
+    segments[-1][1] = min(segments[-1][1], n)
+    return [[int(query_to_ref[a]), int(query_to_ref[b])] for (a, b) in segments]
+
+def weight_segments(segments, part_cqt, fullmix_cqt):
+    alphas = np.concatenate([np.linspace(0.1, 1.0, num = 20), np.arange(1, 11, 0.3), np.arange(10, 510, 10)])
+    for segment in segments:
+        part_segment = part_cqt[:, segment[0]: segment[1] + 1]
+        fullmix_segment = fullmix_cqt[:, segment[0]: segment[1] + 1]
+        assert part_segment.shape == fullmix_segment.shape
+        best = float('-inf')
+        result = 0
+        for alpha in alphas:
+            val = np.sum(np.minimum(part_segment*alpha, fullmix_segment) - np.maximum(part_segment*alpha - fullmix_segment, 0))
+            if val > best:
+                best = val
+                result = alpha
+        part_cqt[:, segment[0]: segment[1] + 1] *= result
+
+@njit(parallel = True)
+def subtract_part(stretched_cqt, fullmix_cqt):
+    """Subtracts the part CQT from the fullmix CQT elementwise."""
+    m, n = stretched_cqt.shape
+    
+    for i in prange(m):
+        for j in prange(n):
+            fullmix_cqt[i, j] -= stretched_cqt[i, j]
+            fullmix_cqt[i, j] = max(fullmix_cqt[i, j], 0)
+    return fullmix_cqt
 
 def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT
