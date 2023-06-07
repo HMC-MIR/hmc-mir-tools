@@ -32,8 +32,14 @@ documentation = "https://hmc-mir.github.io/hmc-mir-tools/"
 repository = "https://github.com/HMC-MIR/hmc-mir-tools"
 
 [build-system]
-requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "numpy>=1.19.0", "Cython>=0.29.21"]
+# requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "numpy>=1.19.0", "Cython>=0.29.21"]
+requires = ["setuptools>=45", "setuptools-git-versioning<2", "numpy>=1.19.0", "Cython>=0.29.21"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
-local_scheme = "no-local-version"
+[tool.setuptools-git-versioning]
+enabled = true
+
+# [tool.setuptools_scm]
+# version_scheme = "hmc_mir.get_version:myversion_func"
+# local_scheme = "no-local-version"
+# write_to = "src/hmc_mir/_version.py"

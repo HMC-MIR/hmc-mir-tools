@@ -9,3 +9,4 @@ dist
 
 *.so
 *.c
+src/hmc_mir/_version.py
