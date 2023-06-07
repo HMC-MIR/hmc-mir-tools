@@ -2,11 +2,10 @@
 
 build
 _autosummary
+dist
 
 *.pyc
 *.egg-info
 
 *.so
 *.c
-*.whl
-*.tar.gz
