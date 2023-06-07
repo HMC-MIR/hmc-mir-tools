@@ -19,8 +19,6 @@ extensions = [
 # This is the function that is executed
 setup(
     name="hmc_mir",
-    use_scm_version=True,
-    setup_requires=['setuptools_scm'],
     # A list of compiler Directives is available at
     # https://cython.readthedocs.io/en/latest/src/userguide/source_files_and_compilation.html#compiler-directives
 
