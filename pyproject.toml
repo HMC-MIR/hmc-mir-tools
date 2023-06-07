@@ -36,9 +36,3 @@ requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "numpy>=1.19.0", "Cyt
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-
-[tool.setuptools]
-py-modules = ["_custom_build"]
-
-[tool.setuptools.cmdclass]
-build_py = "_custom_build.build_py"

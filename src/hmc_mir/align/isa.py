@@ -6,6 +6,8 @@ from numba import njit, prange
 import numpy as np
 from skimage.filters import threshold_li, threshold_niblack, threshold_triangle, threshold_isodata, threshold_mean, threshold_local
 
+from hmc_mir.align.isa_dtw import DTW_Cost_To_AccumCostAndSteps
+
 ### SA_BCQT ###
 
 def binarize_cqt(cqt):

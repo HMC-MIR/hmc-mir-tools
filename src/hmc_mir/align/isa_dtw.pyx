@@ -1,9 +1,7 @@
+import numpy as np
+
 cimport numpy as np
 cimport cython
-
-import sys
-import time
-
 
 DTYPE_INT32 = np.int32
 ctypedef np.int32_t DTYPE_INT32_t

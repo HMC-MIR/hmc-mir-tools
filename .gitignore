@@ -5,3 +5,7 @@ _autosummary
 
 *.pyc
 *.egg-info
+
+**/*.c
+*.so
+.c
