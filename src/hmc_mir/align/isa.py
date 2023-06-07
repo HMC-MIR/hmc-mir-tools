@@ -5,6 +5,7 @@ Code is from https://github.com/HMC-MIR/PianoTrioAlignment and https://archives.
 from numba import njit, prange
 import numpy as np
 from skimage.filters import threshold_li, threshold_niblack, threshold_triangle, threshold_isodata, threshold_mean, threshold_local
+import librosa as lb
 
 from hmc_mir.align.isa_dtw import DTW_Cost_To_AccumCostAndSteps, DTW_GetPath
 
@@ -157,6 +158,147 @@ def subtract_part(stretched_cqt, fullmix_cqt):
             fullmix_cqt[i, j] = max(fullmix_cqt[i, j], 0)
     return fullmix_cqt
 
+def calculate_cqt(audio, sr = 22050, hop_length = 512, bins = 12):
+    """Calculates the CQT of the audio.
+
+    Args:
+        audio (np.ndarray): The audio to be converted to CQT
+        sr (int): The sampling rate of the audio
+        hop_length (int): The hop length of the CQT
+        bins (int): The number of bins per octave
+
+    Returns:
+        cqt (np.ndarray): The CQT of the audio
+    """
+    return np.abs(lb.core.cqt(audio, n_bins = 8 * bins, bins_per_octave = bins, norm = 2))
+
+def cqt_to_chroma(cqt):
+    """Converts a CQT to a chroma representation.
+    
+    Args:
+        cqt (np.ndarray): The CQT to be converted to chroma
+    
+    Returns:
+        chroma (np.ndarray): The chroma representation of the CQT
+    """
+    chroma_map = lb.filters.cq_to_chroma(cqt.shape[0])
+    chromagram = chroma_map.dot(cqt)
+    chromagram = lb.util.normalize(chromagram, norm = 2)
+    return chromagram
+
+def align_part_to_fullmix(query, ref, steps = [1, 1, 1, 2, 2, 1], weights = [1, 1, 2]):
+    """Uses subsequence DTW and the negative normalized cost metric to compute an alignment between
+       the part and full mix."""
+    assert len(steps) % 2 == 0, "The length of steps must be even."
+    dn = np.array(steps[::2], dtype=np.uint32)
+    dm = np.array(steps[1::2], dtype=np.uint32)
+    dw = weights
+    subsequence = True
+    parameter = {'dn': dn, 'dm': dm, 'dw': dw, 'SubSequence': subsequence}
+
+    # Compute cost matrix
+    cost = calculate_cost_fast(query, ref)
+    
+    # DTW
+    [D, s] = DTW_Cost_To_AccumCostAndSteps(cost, parameter)
+    [wp, endCol, endCost] = DTW_GetPath(D, s, parameter)
+
+    # Reformat the output
+    wp = wp.T[::-1]
+    return wp
+
+def get_silence_intervals(silence_indices):
+    """Uses a hard silence detection approach to identify contiguous regions of nonsilence.
+    
+    Args:
+        silence_indices (list): A list of indices of silence
+    
+    Returns:
+        silence_intervals (list): A list of intervals of nonsilence
+    """
+    cur_interval = []
+    start = silence_indices[0]
+    for i in range(len(silence_indices) - 1):
+        if silence_indices[i] + 1 != silence_indices[i+1]:
+            cur_interval.append((start, silence_indices[i]))
+            start = silence_indices[i+1]
+    cur_interval.append((start, silence_indices[-1]))
+    silence_intervals = []
+    for start, end in cur_interval:
+        start_time = frame_to_time(start)
+        end_time = frame_to_time(end)
+        if end_time - start_time < 2:
+            continue
+        silence_intervals.append([start, end])
+    return silence_intervals
+
+def get_threshold(total_energies):
+    """Uses a Gaussian mixture model fitted to an array of total energies to generate a threshold for nonsilence.
+    
+    Args:
+        total_energies (np.ndarray): The total energies of the audio
+    
+    Returns:
+        threshold (float): The threshold for nonsilence
+    """
+    model = mixture.GaussianMixture(n_components=3, covariance_type="full")
+    model.fit(total_energies)
+    pi, mu, sigma = model.weights_.flatten(), model.means_.flatten(), np.sqrt(model.covariances_.flatten())
+    max_idx = np.argmax(mu)
+    threshold = mu[max_idx] - 4 * sigma[max_idx]
+    return threshold
+
+def get_segments(audio, H=512, N=2048, lots_of_silence=True):
+    """Given a piece of audio, calculates all the nonsilence segments within the audio using a hard silence detection approach with GMMs.
+    
+    Args:
+        audio (np.ndarray): The audio to be segmented
+        H (int): The hop length of the STFT
+        N (int): The window size of the STFT
+    
+    Returns:
+        segments (list): A list of the nonsilence segments
+    """
+    stft = lb.stft(audio, n_fft=N, hop_length=H)
+    energies = np.sum(np.square(abs(stft)), axis=0)
+    L = 32
+    total_energies = []
+    for i in range(len(energies)-L):
+        total_energies.append(sum(energies[i:i+L]))
+        
+    total_energies = np.log(total_energies).reshape(-1, 1)
+    threshold = get_threshold(total_energies)
+    
+    is_silence = [False] * (L//2 - 1)
+    for energy in total_energies:
+        if energy <= threshold:
+            is_silence.append(True)
+        else:
+            is_silence.append(False)
+    is_silence.extend([False] * (L//2))
+    silence_indices = np.where(np.array(is_silence) == True)[0]
+    silence_intervals = get_silence_intervals(silence_indices)
+    nonsilence_segments = []
+    cur = 0
+    for start, end in silence_intervals:
+        nonsilence_segments.append([cur, start])
+        cur = end + 1
+    nonsilence_segments.append([cur, len(is_silence)])
+    return nonsilence_segments
+
+def get_segments_piano(piano_cqt):
+    '''
+    The piano has very few silence regions so we just split it into 5 second segments.
+
+    Args:
+        piano_cqt (np.ndarray): The CQT of the piano
+    
+    Returns:
+        segments (list): A list of the nonsilence segments
+    '''
+    n = piano_cqt.shape[1]
+    return [[i, min(i+215, n)] for i in range(0, n, 215)]
+
 def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT
 
@@ -177,5 +319,47 @@ def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
     if segments:
         stretched_segments = stretch_segments(segments, wp)
         weight_segments(stretched_segments, stretched_part, fullmix_cqt)
+    subtract_part(stretched_part, fullmix_cqt)
+    return fullmix_cqt, wp
+
+def isa_cqt(part_cqt, fullmix_cqt, segments = []):
+    """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT by first time stretching the part CQT, then performing reweighting, and then subtracting the part CQT from the full mix CQT.
+    
+    Args:
+        part_cqt (np.ndarray): The CQT of the part that is to be aligned/subtracted
+        fullmix_cqt (np.ndarray): The CQT of the full mix
+        segments (list): A list of the nonsilence segments
+    
+    Returns:
+        fullmix_cqt (np.ndarray): The CQT of the full mix with the part subtracted
+        wp (np.ndarray): The warping path
+    """
+    wp = align_part_to_fullmix(part_cqt, fullmix_cqt)
+    stretched_part = time_stretch_part(part_cqt, fullmix_cqt, wp)
+    if segments:
+        stretched_segments = stretch_segments(segments, wp)
+        weight_segments(stretched_segments, stretched_part, fullmix_cqt)
+    subtract_part(stretched_part, fullmix_cqt)
+    return fullmix_cqt, wp
+
+def isa_chroma(part_cqt, fullmix_cqt, segments):
+    """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT
+
+    First computes the chroma features, then aligns the chroma features, then uses the alignment to:
+    time-stretch the part CQT, then perform reweighting, and then subtract the part CQT from the full mix CQT.
+    
+    Args:
+        part_cqt (np.ndarray): The CQT of the part that is to be aligned/subtracted
+        fullmix_cqt (np.ndarray): The CQT of the full mix
+        segments (list): A list of the nonsilence segments
+    
+    Returns:
+        fullmix_cqt (np.ndarray): The CQT of the full mix with the part subtracted
+    """
+    part_chroma, fullmix_chroma = cqt_to_chroma(part_cqt), cqt_to_chroma(fullmix_cqt)
+    wp = align_part_to_fullmix(part_chroma, fullmix_chroma)
+    stretched_segments = stretch_segments(segments, wp)
+    stretched_part = time_stretch_part(part_cqt, fullmix_cqt, wp)
+    weight_segments(stretched_segments, stretched_part, fullmix_cqt)
     subtract_part(stretched_part, fullmix_cqt)
     return fullmix_cqt, wp
