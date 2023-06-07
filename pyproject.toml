@@ -1,5 +1,44 @@
+[project]
+name = "hmc_mir"
+dynamic = ["version"]
+description = "Collection of tools developed by HMCs MIR Lab"
+readme = "README.md"
+requires-python = ">=3.6"
+license = {file = "LICENSE"}
+authors = [
+    {name = "HMC MIR Lab", email = "tjtsai@hmc.edu"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+]
+
+dependencies = [
+    "numpy>=1.19",
+    "librosa>=0.10.0",
+    "scipy>=1.5",
+    "matplotlib>=3.5.3",
+    "scikit-learn>=0.24.2",
+    "scikit-image>=0.15.0",
+    "opencv-python>=3.4",
+    "pillow>=8.1.0",
+    "numba>=0.56"
+]
+
+[project.urls]
+homepage = "https://github.com/HMC-MIR/hmc-mir-tools"
+documentation = "https://hmc-mir.github.io/hmc-mir-tools/"
+repository = "https://github.com/HMC-MIR/hmc-mir-tools"
+
 [build-system]
-requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "numpy>=1.19.0", "Cython>=0.29.21"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
+
+[tool.setuptools]
+py-modules = ["_custom_build"]
+
+[tool.setuptools.cmdclass]
+build_py = "_custom_build.build_py"
