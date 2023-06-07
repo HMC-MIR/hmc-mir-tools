@@ -36,6 +36,7 @@ requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "numpy>=1.19.0", "Cyt
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
-version_scheme = "hmc_mir.get_version:myversion_func"
-# local_scheme = "no-local-version"
-# write_to = "src/hmc_mir/_version.py"
+# version_scheme = "hmc_mir.get_version:myversion_func"
+# version_scheme = "post-release"
+local_scheme = "no-local-version"
+write_to = "src/hmc_mir/_version.py"
