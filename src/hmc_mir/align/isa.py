@@ -170,7 +170,7 @@ def calculate_cqt(audio, sr = 22050, hop_length = 512, bins = 12):
     Returns:
         cqt (np.ndarray): The CQT of the audio
     """
-    return np.abs(lb.core.cqt(audio, n_bins = 8 * bins, bins_per_octave = bins, norm = 2))
+    return np.abs(lb.core.cqt(audio, n_bins = 8 * bins, bins_per_octave = bins, norm = 2, sr=sr, hop_length=hop_length))
 
 def cqt_to_chroma(cqt):
     """Converts a CQT to a chroma representation.
@@ -248,7 +248,7 @@ def get_threshold(total_energies):
     threshold = mu[max_idx] - 4 * sigma[max_idx]
     return threshold
 
-def get_segments(audio, H=512, N=2048, lots_of_silence=True):
+def get_segments(audio, hop_length=512, N=2048,):
     """Given a piece of audio, calculates all the nonsilence segments within the audio using a hard silence detection approach with GMMs.
     
     Args:
@@ -259,7 +259,7 @@ def get_segments(audio, H=512, N=2048, lots_of_silence=True):
     Returns:
         segments (list): A list of the nonsilence segments
     """
-    stft = lb.stft(audio, n_fft=N, hop_length=H)
+    stft = lb.stft(audio, n_fft=N, hop_length=hop_length)
     energies = np.sum(np.square(abs(stft)), axis=0)
     L = 32
     total_energies = []
@@ -286,19 +286,6 @@ def get_segments(audio, H=512, N=2048, lots_of_silence=True):
     nonsilence_segments.append([cur, len(is_silence)])
     return nonsilence_segments
 
-def get_segments_piano(piano_cqt):
-    '''
-    The piano has very few silence regions so we just split it into 5 second segments.
-
-    Args:
-        piano_cqt (np.ndarray): The CQT of the piano
-    
-    Returns:
-        segments (list): A list of the nonsilence segments
-    '''
-    n = piano_cqt.shape[1]
-    return [[i, min(i+215, n)] for i in range(0, n, 215)]
-
 def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT
 
@@ -320,7 +307,7 @@ def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
         stretched_segments = stretch_segments(segments, wp)
         weight_segments(stretched_segments, stretched_part, fullmix_cqt)
     subtract_part(stretched_part, fullmix_cqt)
-    return fullmix_cqt, wp
+    return fullmix_cqt, wp.T
 
 def isa_cqt(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT by first time stretching the part CQT, then performing reweighting, and then subtracting the part CQT from the full mix CQT.
@@ -340,9 +327,9 @@ def isa_cqt(part_cqt, fullmix_cqt, segments = []):
         stretched_segments = stretch_segments(segments, wp)
         weight_segments(stretched_segments, stretched_part, fullmix_cqt)
     subtract_part(stretched_part, fullmix_cqt)
-    return fullmix_cqt, wp
+    return fullmix_cqt, wp.T
 
-def isa_chroma(part_cqt, fullmix_cqt, segments):
+def isa_chroma(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT
 
     First computes the chroma features, then aligns the chroma features, then uses the alignment to:
@@ -358,8 +345,9 @@ def isa_chroma(part_cqt, fullmix_cqt, segments):
     """
     part_chroma, fullmix_chroma = cqt_to_chroma(part_cqt), cqt_to_chroma(fullmix_cqt)
     wp = align_part_to_fullmix(part_chroma, fullmix_chroma)
-    stretched_segments = stretch_segments(segments, wp)
     stretched_part = time_stretch_part(part_cqt, fullmix_cqt, wp)
-    weight_segments(stretched_segments, stretched_part, fullmix_cqt)
+    if segments:
+        stretched_segments = stretch_segments(segments, wp)
+        weight_segments(stretched_segments, stretched_part, fullmix_cqt)
     subtract_part(stretched_part, fullmix_cqt)
-    return fullmix_cqt, wp
+    return fullmix_cqt, wp.T
