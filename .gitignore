@@ -6,6 +6,7 @@ _autosummary
 *.pyc
 *.egg-info
 
-**/*.c
 *.so
-.c
+*.c
+*.whl
+*.tar.gz
