@@ -4,7 +4,8 @@ Code is from https://github.com/HMC-MIR/PianoTrioAlignment and https://archives.
 '''
 from numba import njit, prange
 import numpy as np
-from skimage.filters import threshold_li, threshold_niblack, threshold_triangle, threshold_isodata, threshold_mean, threshold_local
+from skimage.filters import threshold_triangle
+from scipy.spatial.distance import cdist
 import librosa as lb
 from sklearn import mixture
 
@@ -27,7 +28,7 @@ def binarize_cqt(cqt):
     binarized = []
     for i in range(0, rows, bin_size):
         if i - context < 0:
-            data = cqt[:i + context]
+            data = cqt[:i + context + bin_size]
         elif i + context >= rows:
             data = cqt[i - context:]
         else:
@@ -38,18 +39,7 @@ def binarize_cqt(cqt):
         binarized.extend(x1)
     return np.array(binarized).astype(float)
 
-@njit(parallel = True)
-def calculate_cost_fast(query, ref):
-    m, n1 = query.shape
-    m, n2 = ref.shape
-    result = np.zeros((n1, n2))
-    for j1 in prange(n1):
-        for j2 in prange(n2):
-            for i in prange(m):
-                result[j1, j2] += query[i, j1] * ref[i, j2]
-    return result
-
-def calculate_cost(query, ref):
+def calculate_binary_cost(query, ref):
     """Calculates the negative normalized cost between the query and reference.
     
     Args:
@@ -59,40 +49,39 @@ def calculate_cost(query, ref):
     Returns:
         result (np.ndarray): The negative normalized cost matrix
     """
-    cost = calculate_cost_fast(query, ref)
+    cost = np.inner(query.T, ref.T)
     row_sums = query.sum(axis = 0) * -1
     result = cost / row_sums[:, None]
     result[result == np.inf] = 0
     result = np.nan_to_num(result)
     return result
 
-def align_binarized_cqts(query, ref, steps = [1,1,1,2,2,1], weights = [1,1,2]):
-    """Uses subsequence DTW and the negative normalized inner product to compute an alignment between the part and full mix.
+@njit(parallel = True)
+def calculate_neg_norm_min_cost(query, ref):
+    """Calculates the negative normalized min cost between the query and reference."""
+    m, n1 = query.shape
+    m, n2 = ref.shape
+    result = np.zeros((n1, n2))
+    col_sums = np.zeros(n1)
+    for j1 in prange(n1):
+        for j2 in prange(n2):
+            for i in prange(m):
+                result[j1, j2] += min(query[i, j1], ref[i, j2])
     
-    Args:
-        query (np.ndarray): The binarized CQT of the part
-        ref (np.ndarray): The binarized CQT of the full mix
-        steps (list): The steps to be used in the subsequence DTW
-        weights (list): The weights to be used in the subsequence DTW
-    """
-    # set params
-    assert len(steps) % 2 == 0, "The length of steps must be even."
-    dn = np.array(steps[::2], dtype=np.uint32)
-    dm = np.array(steps[1::2], dtype=np.uint32)
-    dw = weights
-    subsequence = True
-    parameter = {'dn': dn, 'dm': dm, 'dw': dw, 'SubSequence': subsequence}
+    for j1 in prange(n1):
+        for i in prange(m):
+            col_sums[j1] += query[i, j1]
 
-    # Compute cost matrix
-    cost = calculate_cost(query, ref)
+    for j1 in prange(n1):
+        for j2 in prange(n2):
+            result[j1, j2] *= -1
+            result[j1, j2] /= col_sums[j1]
+    return result
 
-    # DTW
-    [D, s] = DTW_Cost_To_AccumCostAndSteps(cost, parameter)
-    [wp, endCol, endCost] = DTW_GetPath(D, s, parameter)
-
-    # Reformat the output
-    wp = wp.T[::-1]
-    return wp
+def calculate_cosine_cost(X,Y):
+    cost = cdist(X,Y,'cosine')
+    cost[np.isnan(cost)] = 0
+    return cost
 
 def time_stretch_part(query, ref, alignment):
     """Uses the alignment computed from DTW to time stretch the query to have the same dimensions as the reference.
@@ -134,6 +123,16 @@ def stretch_segments(segments, wp):
     return [[int(query_to_ref[a]), int(query_to_ref[b])] for (a, b) in segments]
 
 def weight_segments(segments, part_cqt, fullmix_cqt):
+    """Uses the alignment created from DTW to weight the nonsilence segments accordingly.
+
+    Args:
+        segments (list): The nonsilence segments
+        part_cqt (np.ndarray): The CQT of the part
+        fullmix_cqt (np.ndarray): The CQT of the full mix
+    
+    Returns:
+        segments (list): The weighted nonsilence segments
+    """
     alphas = np.concatenate([np.linspace(0.1, 1.0, num = 20), np.arange(1, 11, 0.3), np.arange(10, 510, 10)])
     for segment in segments:
         part_segment = part_cqt[:, segment[0]: segment[1] + 1]
@@ -150,7 +149,15 @@ def weight_segments(segments, part_cqt, fullmix_cqt):
 
 @njit(parallel = True)
 def subtract_part(stretched_cqt, fullmix_cqt):
-    """Subtracts the part CQT from the fullmix CQT elementwise."""
+    """Subtracts the part CQT from the fullmix CQT elementwise.
+
+    Args:
+        stretched_cqt (np.ndarray): The time stretched part CQT
+        fullmix_cqt (np.ndarray): The CQT of the full mix
+    
+    Returns:
+        fullmix_cqt (np.ndarray): The CQT of the full mix with the part CQT subtracted
+    """
     m, n = stretched_cqt.shape
     
     for i in prange(m):
@@ -171,7 +178,7 @@ def calculate_cqt(audio, sr = 22050, hop_length = 512, bins = 12):
     Returns:
         cqt (np.ndarray): The CQT of the audio
     """
-    return np.abs(lb.core.cqt(audio, n_bins = 8 * bins, bins_per_octave = bins, norm = 2, sr=sr, hop_length=hop_length))
+    return np.abs(lb.core.cqt(audio, n_bins = 8 * bins, bins_per_octave = bins, sr=sr, hop_length=hop_length))
 
 def cqt_to_chroma(cqt):
     """Converts a CQT to a chroma representation.
@@ -187,7 +194,7 @@ def cqt_to_chroma(cqt):
     chromagram = lb.util.normalize(chromagram, norm = 2)
     return chromagram
 
-def align_part_to_fullmix(query, ref, steps = [1, 1, 1, 2, 2, 1], weights = [1, 1, 2]):
+def align_subsequence_dtw(cost, steps = [1, 1, 1, 2, 2, 1], weights = [1, 1, 2]):
     """Uses subsequence DTW and the negative normalized cost metric to compute an alignment between
        the part and full mix."""
     assert len(steps) % 2 == 0, "The length of steps must be even."
@@ -196,9 +203,6 @@ def align_part_to_fullmix(query, ref, steps = [1, 1, 1, 2, 2, 1], weights = [1, 
     dw = weights
     subsequence = True
     parameter = {'dn': dn, 'dm': dm, 'dw': dw, 'SubSequence': subsequence}
-
-    # Compute cost matrix
-    cost = calculate_cost_fast(query, ref)
     
     # DTW
     [D, s] = DTW_Cost_To_AccumCostAndSteps(cost, parameter)
@@ -331,7 +335,8 @@ def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
     """
 
     part_binarized, fullmix_binarized = binarize_cqt(part_cqt), binarize_cqt(fullmix_cqt)
-    wp = align_binarized_cqts(part_binarized, fullmix_binarized)
+    cost = calculate_binary_cost(part_binarized, fullmix_binarized)
+    wp = align_subsequence_dtw(cost)
     stretched_part = time_stretch_part(part_cqt, fullmix_cqt, wp)
     if segments:
         stretched_segments = stretch_segments(segments, wp)
@@ -351,7 +356,13 @@ def isa_cqt(part_cqt, fullmix_cqt, segments = []):
         fullmix_cqt (np.ndarray): The CQT of the full mix with the part subtracted
         wp (np.ndarray): The warping path
     """
-    wp = align_part_to_fullmix(part_cqt, fullmix_cqt)
+    # part_cqt_with_noise = part_cqt + np.abs(np.random.randn(*part_cqt.shape)) * 1e-8
+    # part_cqt_norm = part_cqt_with_noise / np.linalg.norm(part_cqt_with_noise, axis=0)
+    
+    # fullmix_cqt_with_noise = fullmix_cqt + np.abs(np.random.randn(*fullmix_cqt.shape)) * 1e-8
+    # fullmix_cqt_norm = fullmix_cqt_with_noise / np.linalg.norm(fullmix_cqt_with_noise, axis=0)
+    cost = calculate_neg_norm_min_cost(part_cqt, fullmix_cqt)
+    wp = align_subsequence_dtw(cost)
     stretched_part = time_stretch_part(part_cqt, fullmix_cqt, wp)
     if segments:
         stretched_segments = stretch_segments(segments, wp)
@@ -374,7 +385,8 @@ def isa_chroma(part_cqt, fullmix_cqt, segments = []):
         fullmix_cqt (np.ndarray): The CQT of the full mix with the part subtracted
     """
     part_chroma, fullmix_chroma = cqt_to_chroma(part_cqt), cqt_to_chroma(fullmix_cqt)
-    wp = align_part_to_fullmix(part_chroma, fullmix_chroma)
+    cost = calculate_cosine_cost(part_chroma.T, fullmix_chroma.T)
+    wp = align_subsequence_dtw(cost)
     stretched_part = time_stretch_part(part_cqt, fullmix_cqt, wp)
     if segments:
         stretched_segments = stretch_segments(segments, wp)
