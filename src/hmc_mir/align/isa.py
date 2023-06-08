@@ -6,6 +6,7 @@ from numba import njit, prange
 import numpy as np
 from skimage.filters import threshold_li, threshold_niblack, threshold_triangle, threshold_isodata, threshold_mean, threshold_local
 import librosa as lb
+from sklearn import mixture
 
 from hmc_mir.align.isa_dtw import DTW_Cost_To_AccumCostAndSteps, DTW_GetPath
 
@@ -207,6 +208,20 @@ def align_part_to_fullmix(query, ref, steps = [1, 1, 1, 2, 2, 1], weights = [1, 
     wp = wp.T[::-1]
     return wp
 
+
+def frame_to_time(frame, hop_length = 512, sr = 22050):
+    """ Converts a frame index to a time in seconds.
+
+    Args:
+        frame (int): The frame index
+        hop_length (int): The hop length of the CQT
+        sr (int): The sampling rate of the audio
+    
+    Returns:
+        time (float): The time in seconds
+    """
+    return frame * hop_length / sr
+
 def get_silence_intervals(silence_indices):
     """Uses a hard silence detection approach to identify contiguous regions of nonsilence.
     
@@ -253,7 +268,7 @@ def get_segments(audio, hop_length=512, N=2048,):
     
     Args:
         audio (np.ndarray): The audio to be segmented
-        H (int): The hop length of the STFT
+        hop_length (int): The hop length of the STFT
         N (int): The window size of the STFT
     
     Returns:
@@ -286,6 +301,21 @@ def get_segments(audio, hop_length=512, N=2048,):
     nonsilence_segments.append([cur, len(is_silence)])
     return nonsilence_segments
 
+def parse_wp(wp):
+    """Parses the output of the alignment algorithm into a more readable format.
+
+    Args:
+        wp (np.ndarray): The output of the alignment algorithm
+    
+    Returns:
+        wp (np.ndarray): The parsed output of the alignment algorithm
+    """
+
+    wp = np.array(sorted(wp, key = lambda x: x[0]))
+    query_preds = wp[:, 0]
+    ref_preds = wp[:, 1]
+    return np.vstack((query_preds, ref_preds))
+
 def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT
 
@@ -307,7 +337,7 @@ def isa_bcqt(part_cqt, fullmix_cqt, segments = []):
         stretched_segments = stretch_segments(segments, wp)
         weight_segments(stretched_segments, stretched_part, fullmix_cqt)
     subtract_part(stretched_part, fullmix_cqt)
-    return fullmix_cqt, wp.T
+    return fullmix_cqt, parse_wp(wp)
 
 def isa_cqt(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT by first time stretching the part CQT, then performing reweighting, and then subtracting the part CQT from the full mix CQT.
@@ -327,7 +357,7 @@ def isa_cqt(part_cqt, fullmix_cqt, segments = []):
         stretched_segments = stretch_segments(segments, wp)
         weight_segments(stretched_segments, stretched_part, fullmix_cqt)
     subtract_part(stretched_part, fullmix_cqt)
-    return fullmix_cqt, wp.T
+    return fullmix_cqt, parse_wp(wp)
 
 def isa_chroma(part_cqt, fullmix_cqt, segments = []):
     """Performs the subtractive alignment algorithm between the part CQT and the full mix CQT
@@ -350,4 +380,4 @@ def isa_chroma(part_cqt, fullmix_cqt, segments = []):
         stretched_segments = stretch_segments(segments, wp)
         weight_segments(stretched_segments, stretched_part, fullmix_cqt)
     subtract_part(stretched_part, fullmix_cqt)
-    return fullmix_cqt, wp.T
+    return fullmix_cqt, parse_wp(wp)
