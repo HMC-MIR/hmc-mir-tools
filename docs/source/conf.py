@@ -11,8 +11,10 @@ sys.path.insert(0, os.path.abspath('../../src'))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+from datetime import datetime
+
 project = 'HMC MIR'
-copyright = '2023, HMC MIR Lab'
+copyright = f'{datetime.now().year}, HMC MIR Lab'
 author = 'HMC MIR Lab'
 
 # -- General configuration ---------------------------------------------------

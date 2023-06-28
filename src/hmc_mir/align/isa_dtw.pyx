@@ -15,14 +15,18 @@ cdef DTYPE_FLOAT_t MAX_FLOAT = float('inf')
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 def DTW_Cost_To_AccumCostAndSteps(Cin, parameter):
     '''
-    Inputs
+    Args:
         C: The cost Matrix
+        parameter: a dictionary with the following keys
+            dn: the row steps (default [1,1,0])
+            dm: the col steps (default [1,0,1])
+            dw: the step weights (default [1,1,1])
+
+    Returns:
+        An accumulated cost along with the matrix of steps taken to achieve that cost
     '''
 
-
-    '''
-    Section for checking and catching errors in the inputs
-    '''
+    ### Section for checking and catching errors in the inputs
 
     cdef np.ndarray[DTYPE_FLOAT_t, ndim=2] C
     try:
@@ -132,8 +136,16 @@ def DTW_Cost_To_AccumCostAndSteps(Cin, parameter):
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 def DTW_GetPath(np.ndarray[DTYPE_FLOAT_t, ndim=2] accumCost, np.ndarray[np.uint32_t, ndim=2] stepsForCost, parameter):
     '''
+    Args:
+        accumCost: the accumulated cost matrix from DTW
+        stepsForCost: the matrix of steps taken to achieve the accumulated cost
+        parameter: a dictionary of parameters for the DTW algorithm
+            Parameter should have: 'dn', 'dm', 'dw', 'SubSequence'
 
-    Parameter should have: 'dn', 'dm', 'dw', 'SubSequence'
+    Returns:
+        path: a list of the steps taken to get from the start to the end of the accumulated cost matrix
+        endCol: the column index of the end of the path
+        endRow: the row index of the end of the path
     '''
 
     cdef np.ndarray[unsigned int, ndim=1] dn
