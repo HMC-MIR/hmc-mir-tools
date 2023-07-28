@@ -2,6 +2,7 @@
 """
 
 import numpy as np
+import numpy.matlib
 import matplotlib.pyplot as plt
 from PIL import Image, ImageFilter, ImageChops
 import cv2
@@ -125,7 +126,7 @@ def computeStaveFeatureMap(img, ncols, lrange, urange, delta):
     lineseps = np.arange(lrange, urange, delta)
     maxFiltSize = int(np.ceil(4 * lineseps[-1])) + 1
     featmap = np.zeros((len(lineseps), imgHeight - maxFiltSize + 1, ncols))
-    stavelens = np.zeros(len(lineseps), dtype=np.int)
+    stavelens = np.zeros(len(lineseps), dtype=int)
     for i, linesep in enumerate(lineseps):
         filt, stavelen = getCombFilter(linesep)
         padded = np.zeros((maxFiltSize, 1))
@@ -686,7 +687,7 @@ def processImageFile(imagefile, outfile):
     estStaffLineLocs, sfiltlen = getEstStaffLineLocs(featmap, nhlocs, stavelens, columnWidth, maxDeltaRowInitial, int(-2*targetLineSep))
     staveMidpts = estimateStaffMidpoints(estStaffLineLocs, minNumStaves, maxNumStaves, minStaveSeparation)
     staveIdxs, nhRowOffsets = assignNoteheadsToStaves(nhlocs, staveMidpts)
-    estStaffLineLocs, sfiltlen = getEstStaffLineLocs(featmap, nhlocs, stavelens, columnWidth, maxDeltaRowRefined, (nhRowOffsets - 2*targetLineSep).astype(np.int))    
+    estStaffLineLocs, sfiltlen = getEstStaffLineLocs(featmap, nhlocs, stavelens, columnWidth, maxDeltaRowRefined, (nhRowOffsets - 2*targetLineSep).astype(int))    
     nhvals = estimateNoteLabels(estStaffLineLocs)
     
     # cluster noteheads & staves
